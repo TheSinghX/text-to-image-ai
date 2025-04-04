@@ -5,8 +5,6 @@ import requests
 import json
 import time
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, session, abort
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import DeclarativeBase
 from datetime import datetime
 from flask_login import LoginManager, login_user, logout_user, login_required, current_user
 from flask_mail import Mail, Message
@@ -19,10 +17,6 @@ logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 # Flask app setup
-class Base(DeclarativeBase):
-    pass
-
-db = SQLAlchemy(model_class=Base)
 app = Flask(__name__)
 app.secret_key = os.environ.get("SESSION_SECRET", "default_secret_key")
 
@@ -32,6 +26,9 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_recycle": 300,
     "pool_pre_ping": True,
 }
+
+# Import db and models
+from models import db, User, Image
 db.init_app(app)
 
 # Flask-Login setup
@@ -43,7 +40,7 @@ login_manager.login_message_category = 'info'
 # Guest user limit
 app.config['GUEST_LIMIT'] = 1  # Allow 1 image generation for guest users
 
-# Email setup (optional, if you use email features)
+# Email setup (optional)
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -53,9 +50,7 @@ SMTP_PORT = 587
 SMTP_USERNAME = "dreampixel2611@gmail.com"
 SMTP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD')
 
-# Models
-from models import User, Image
-
+# Load user for Flask-Login
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
@@ -74,7 +69,7 @@ def generate_image():
         if not prompt:
             return jsonify({'error': 'Prompt is required'}), 400
 
-        # Check guest generation limit
+        # Guest generation limit
         if not current_user.is_authenticated:
             if session.get('guest_generations', 0) >= app.config['GUEST_LIMIT']:
                 return jsonify({
@@ -82,7 +77,6 @@ def generate_image():
                     'details': 'You have reached the limit for free image generations. Please sign up or log in.',
                     'require_auth': True
                 }), 403
-
             session['guest_generations'] = session.get('guest_generations', 0) + 1
 
         STABILITY_API_KEY = os.environ.get("STABILITY_API_KEY")
@@ -90,12 +84,10 @@ def generate_image():
             return jsonify({'error': 'API key missing'}), 401
 
         stability_url = "https://api.stability.ai/v1/generation/stable-diffusion-v1-5/text-to-image"
-
         headers = {
             "Authorization": f"Bearer {STABILITY_API_KEY}",
             "Content-Type": "application/json"
         }
-
         payload = {
             "text_prompts": [{"text": prompt}],
             "cfg_scale": 7,
