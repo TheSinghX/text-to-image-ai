@@ -1,4 +1,10 @@
-buildCommand: |
-  pip install --upgrade pip
-  pip install -r requirements.txt
-startCommand: python AICRAFT/app.py
+services:
+  - type: web
+    name: text-to-image-ai
+    env: python
+    buildCommand: |
+      pip install --upgrade pip
+      pip install -r requirements.txt
+    startCommand: python AICRAFT/app.py
+    branch: main
+    plan: free
