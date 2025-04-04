@@ -13,6 +13,9 @@ from flask_mail import Mail, Message
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 import re
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -33,15 +36,13 @@ app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
     "pool_pre_ping": True,
 }
 
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-
 # Email configuration
 SMTP_SERVER = "smtp.gmail.com"
 SMTP_PORT = 587
 SMTP_USERNAME = "dreampixel2611@gmail.com"
 SMTP_PASSWORD = os.environ.get('GMAIL_APP_PASSWORD')
+
+# Initialize DB and Login Manager
 db.init_app(app)
 login_manager = LoginManager(app)
 login_manager.login_view = 'login'
@@ -52,18 +53,18 @@ login_manager.login_message_category = 'info'
 CLIPDROP_API_KEY = os.environ.get("CLIPDROP_API_KEY")
 CLIPDROP_API_URL = "https://clipdrop-api.co/text-to-image/v1"
 
-# User session tracking - limit non-logged in users to 1 generation
-app.config['GUEST_LIMIT'] = 1  # Allow 1 image for non-logged-in users
+# Guest session limit
+app.config['GUEST_LIMIT'] = 1
 
-# Import models
+# ⬇️ Import models **AFTER** db.init_app to prevent circular import issues
 from models import User, Image
 
-# Setup user loader callback for Flask-Login
+# Setup user loader for Flask-Login
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(int(user_id))
 
-# Create tables
+# Create database tables
 with app.app_context():
     db.create_all()
 
@@ -79,7 +80,7 @@ def generate_image():
         if not prompt:
             return jsonify({'error': 'Prompt is required'}), 400
         
-        # Check if guest user has exceeded limit
+        # Guest user check
         if not current_user.is_authenticated:
             if session.get('guest_generations', 0) >= app.config['GUEST_LIMIT']:
                 return jsonify({
@@ -87,8 +88,6 @@ def generate_image():
                     'details': 'You have reached the limit for free image generations. Please sign up or log in to continue.',
                     'require_auth': True
                 }), 403
-            
-            # Increment the guest generation count
             session['guest_generations'] = session.get('guest_generations', 0) + 1
         
         if not CLIPDROP_API_KEY:
@@ -126,16 +125,14 @@ def generate_image():
         
         response_data = response.json()
         
-        if not response_data.get('image'):  # Adjust this based on Clipdrop API response format
+        if not response_data.get('image'):
             return jsonify({'error': 'No image was generated'}), 500
         
         image_base64 = response_data['image']
         
-        if current_user.is_authenticated:
-            new_image = Image(prompt=prompt, image_data=image_base64, user_id=current_user.id)
-        else:
-            new_image = Image(prompt=prompt, image_data=image_base64)
-            
+        new_image = Image(prompt=prompt, image_data=image_base64,
+                          user_id=current_user.id if current_user.is_authenticated else None)
+        
         db.session.add(new_image)
         db.session.commit()
         
