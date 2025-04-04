@@ -1,0 +1,3 @@
+build:
+  command: pip install -r requirements.txt
+start: python AICRAFT/app.py
