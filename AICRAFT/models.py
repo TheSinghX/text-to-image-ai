@@ -1,7 +1,10 @@
-from app import db
+from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_login import UserMixin
+
+# Create db object here instead of importing from app.py
+db = SQLAlchemy()
 
 class User(UserMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -29,7 +32,6 @@ class User(UserMixin, db.Model):
     def __repr__(self):
         return f'<User {self.username}>'
 
-# This is moved from the app.py file to centralize all models
 class Image(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     prompt = db.Column(db.String(500), nullable=False)
